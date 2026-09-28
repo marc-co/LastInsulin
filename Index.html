@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Sidste Insulin & Blodsukker - iPad Mini 3</title>
+    
+    <!-- iOS PWA Indstillinger -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <!-- Firebase v8 SDK (Kompatibel med iOS 12) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f2f2f7;
+            margin: 0;
+            padding: 12px;
+            color: #1c1c1e;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 24px;
+            margin: 0 0 10px 0;
+        }
+
+        .grid-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background-color: #ffffff;
+            border-radius: 14px;
+            padding: 14px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .card-header {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            padding-bottom: 4px;
+            border-bottom: 2px solid #f2f2f7;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .tag-basal { color: #007aff; }
+        .tag-bolus { color: #d32f2f; }
+        .tag-dexcom { color: #2e7d32; }
+
+        .time-display {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .field-box {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 6px;
+            text-align: center;
+            border: 1px solid #e5e5ea;
+        }
+
+        .field-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #8e8e93;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+
+        .field-value {
+            font-size: 44px;
+            font-weight: 700;
+            color: #000000;
+            line-height: 1.1;
+        }
+
+        .elapsed-box {
+            background-color: #eef5ff;
+            border-radius: 8px;
+            padding: 10px 6px;
+            text-align: center;
+            font-size: 44px;
+            font-weight: 700;
+            color: #1c1c1e;
+            margin-bottom: 10px;
+            border: 1px solid #d0e2ff;
+            line-height: 1.1;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            font-size: 17px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-basal { background-color: #007aff; color: #ffffff; }
+        .btn-basal:disabled { background-color: #a0c7ff; }
+
+        .btn-bolus { background-color: #d32f2f; color: #ffffff; }
+        .btn-bolus:disabled { background-color: #ef9a9a; }
+
+        .status {
+            text-align: center;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            max-width: 300px;
+            margin: 0 auto 10px auto;
+        }
+
+        .status.online { background-color: #e4f9e0; color: #28a745; }
+        .status.loading { background-color: #fff3cd; color: #856404; }
+        .status.error { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body onclick="initAudioContext()">
+
+    <h1>Sidste Insulin & Blodsukker</h1>
+    <div id="status" class="status loading">Forbinder til LastInsulin...</div>
+
+    <div class="grid-container">
+
+        <!-- DEXCOM BLODSUKKER CARD -->
+        <div class="card">
+            <div class="card-header tag-dexcom">
+                <span>Dexcom Blodsukker</span>
+            </div>
+            <div class="time-display">
+                <div class="field-box">
+                    <div class="field-label">Blodsukker</div>
+                    <div id="glucose-value" class="field-value">--.-</div>
+                </div>
+                <div class="field-box">
+                    <div class="field-label">Trend</div>
+                    <div id="glucose-trend" class="field-value">--</div>
+                </div>
+            </div>
+            <div class="time-display" style="margin-bottom: 0;">
+                <div class="field-box" style="grid-column: span 2;">
+                    <div class="field-label">Sidst opdateret</div>
+                    <div id="glucose-time" class="field-value" style="font-size: 32px;">--:--</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- BASAL LOG CARD -->
+        <div class="card">
+            <div class="card-header tag-basal">
+                <span>Basal (Langtids)</span>
+            </div>
+            <div class="time-display">
+                <div class="field-box">
+                    <div class="field-label">Dato</div>
+                    <div id="basal-date" class="field-value">--/--/----</div>
+                </div>
+                <div class="field-box">
+                    <div class="field-label">Klokkeslæt</div>
+                    <div id="basal-time" class="field-value">--:--</div>
+                </div>
+            </div>
+            <div id="basal-elapsed" class="elapsed-box">
+                -- min
+            </div>
+            <button id="btn-basal" class="btn btn-basal" onclick="registrerInsulin('BasalLog', 'btn-basal', 'basal')">
+                Registrer Basal
+            </button>
+        </div>
+
+        <!-- BOLUS LOG CARD -->
+        <div class="card">
+            <div class="card-header tag-bolus">
+                <span>Bolus (Hurtigvirkende)</span>
+            </div>
+            <div class="time-display">
+                <div class="field-box">
+                    <div class="field-label">Dato</div>
+                    <div id="bolus-date" class="field-value">--/--/----</div>
+                </div>
+                <div class="field-box">
+                    <div class="field-label">Klokkeslæt</div>
+                    <div id="bolus-time" class="field-value">--:--</div>
+                </div>
+            </div>
+            <div id="bolus-elapsed" class="elapsed-box">
+                -- min
+            </div>
+            <button id="btn-bolus" class="btn btn-bolus" onclick="registrerInsulin('BolusLog', 'btn-bolus', 'bolus')">
+                Registrer Bolus
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        // 1. Firebase Konfiguration
+        const firebaseConfig = {
+        apiKey: "AIzaSyBN36NSkRa4D07d0eiGIuKqmwDmpknPaTU",
+        authDomain: "lastinsulin.firebaseapp.com",
+        projectId: "lastinsulin",
+        storageBucket: "lastinsulin.firebasestorage.app",
+        messagingSenderId: "975999357269",
+        appId: "1:975999357269:web:9d333dcbdb66c9d0ce5fdc",
+        measurementId: "G-669YW3LQRH"
+        };
+
+        // 2. Dexcom Share Login Oplysninger (Account ID / Brugernavn & Kodeord)
+        const DEXCOM_ACCOUNT_NAME = "89e25931-71bb-471b-acc5-e4ba101c04ec";
+        const DEXCOM_PASSWORD = "KOnffeti09";
+        
+        // Dexcom Share Server URL (Brug 'shareous1.dexcom.com' for Europa/Danmark, eller 'share1.dexcom.com' for USA)
+        const DEXCOM_SHARE_SERVER = "https://shareous1.dexcom.com/ShareWebServices/Services";
+        const DEXCOM_APPLICATION_ID = "d898ce3e-1e82-41db-82f0-80e918140ec0"; // Standard Dexcom Share App ID
+
+        let dexcomSessionId = null; // Gemmer det hentede Session ID
+
+        // Initialiser Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const statusDiv = document.getElementById('status');
+
+        let lastBasalDate = null;
+        let lastBolusDate = null;
+
+        // Alarm variabler
+        let minutesBetweenLimit = null;
+        let alarmHasSoundedForCurrentBolus = false;
+        let audioCtx = null;
+
+        function initAudioContext() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) {
+                    audioCtx = new AudioContext();
+                }
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playOneSecondAlarm() {
+            initAudioContext();
+            if (!audioCtx) return;
+
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.type = 'square';
+                osc.frequency.value = 880;
+
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start();
+
+                setTimeout(() => {
+                    osc.stop();
+                    osc.disconnect();
+                }, 1000);
+            } catch (e) {
+                console.error("Fejl ved afspilning af alarmlyd:", e);
+            }
+        }
+
+        // Oversætter Dexcom Share trend-tal/strenge til pile-ikoner
+        function mapTrendArrow(trend) {
+            const trendMap = {
+                1: '⇈', // DoubleUp
+                2: '↑', // SingleUp
+                3: '↗', // FortyFiveUp
+                4: '→', // Flat
+                5: '↘', // FortyFiveDown
+                6: '↓', // SingleDown
+                7: '⇊', // DoubleDown
+                'DoubleUp': '⇈',
+                'SingleUp': '↑',
+                'FortyFiveUp': '↗',
+                'Flat': '→',
+                'FortyFiveDown': '↘',
+                'SingleDown': '↓',
+                'DoubleDown': '⇊'
+            };
+            return trendMap[trend] || '–';
+        }
+
+        // Vi bruger en proxy-service, der videresender POST-payloads og skjulere origin
+        const CORS_PROXY = "https://api.codetabs.com/v1/proxy?quest=";
+
+        // Trin 1: Hent Session ID fra Dexcom Share
+        async function getDexcomSessionId() {
+            if (!DEXCOM_ACCOUNT_NAME || DEXCOM_ACCOUNT_NAME === "DIT_DEXCOM_BRUGERNAVN_ELLER_ACCOUNT_ID") {
+                console.warn("Dexcom loginoplysninger mangler.");
+                return null;
+            }
+
+            const targetUrl = `${DEXCOM_SHARE_SERVER}/General/LoginPublisherAccountById`;
+
+            const payload = {
+                accountName: DEXCOM_ACCOUNT_NAME,
+                password: DEXCOM_PASSWORD,
+                applicationId: DEXCOM_APPLICATION_ID
+            };
+
+            try {
+                // Vi kalder direkte eller via proxy
+                const response = await fetch(CORS_PROXY + encodeURIComponent(targetUrl), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'User-Agent': 'Dexcom Share/3.0.2.11297'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Login fejlede med status: ${response.status}`);
+                }
+
+                let sessionId = await response.text();
+                sessionId = sessionId.replace(/^"|"$/g, ''); // Fjern anførselstegn
+                
+                dexcomSessionId = sessionId;
+                console.log("Dexcom Share login fuldført. Session ID modtaget:", sessionId);
+                return sessionId;
+            } catch (error) {
+                console.error("Fejl ved Dexcom Share login:", error);
+                return null;
+            }
+        }
+
+        // Trin 2: Hent blodsukkermålinger ved hjælp af Session ID
+        async function hentDexcomBlodsukker() {
+            if (!dexcomSessionId) {
+                const acquired = await getDexcomSessionId();
+                if (!acquired) return;
+            }
+
+            const targetUrl = `${DEXCOM_SHARE_SERVER}/General/ReadPublisherLatestGlucoseValues?sessionId=${dexcomSessionId}&minutes=1440&maxCount=1`;
+
+            try {
+                const response = await fetch(CORS_PROXY + encodeURIComponent(targetUrl), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'User-Agent': 'Dexcom Share/3.0.2.11297'
+                    }
+                });
+
+                if (response.status === 401 || response.status === 500) {
+                    console.log("Session udløbet. Fornyer login...");
+                    dexcomSessionId = null;
+                    const acquired = await getDexcomSessionId();
+                    if (acquired) return hentDexcomBlodsukker();
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`Kunne ikke hente blodsukker: ${response.status}`);
+                }
+
+                const records = await response.json();
+
+                if (records && records.length > 0) {
+                    const lastRecord = records[0];
+
+                    // Omregn mg/dL til mmol/L
+                    const mmolValue = (lastRecord.Value / 18.0182).toFixed(1);
+                    const trendArrow = mapTrendArrow(lastRecord.Trend);
+
+                    // Udtræk timestamp
+                    let recordTime;
+                    if (lastRecord.WT) {
+                        const match = lastRecord.WT.match(/\d+/);
+                        recordTime = match ? new Date(parseInt(match[0], 10)) : new Date();
+                    } else {
+                        recordTime = new Date();
+                    }
+
+                    const timeStr = recordTime.toLocaleTimeString('da-DK', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+
+                    document.getElementById('glucose-value').innerText = mmolValue;
+                    document.getElementById('glucose-trend').innerText = trendArrow;
+                    document.getElementById('glucose-time').innerText = timeStr;
+                }
+            } catch (error) {
+                console.error("Fejl ved hentning af Dexcom blodsukker:", error);
+            }
+        }
+
+        // Hent "Minuttes Between" fra Setup/BolusAlarm
+        function hentSetupKonfiguration() {
+            db.collection("Setup").doc("BolusAlarm").get()
+                .then((doc) => {
+                    if (doc.exists && doc.data()["Minuttes Between"] !== undefined) {
+                        minutesBetweenLimit = parseInt(doc.data()["Minuttes Between"], 10);
+                    }
+                })
+                .catch((error) => {
+                    console.error("Fejl ved hentning af Setup/BolusAlarm:", error);
+                });
+        }
+
+        function formatDateTime(timestamp) {
+            if (!timestamp) return { date: '--/--/----', time: '--:--', dateObj: null };
+
+            let originalDate = timestamp.toDate();
+            let now = new Date();
+            let adjustedDate;
+
+            if (originalDate <= now) {
+                adjustedDate = originalDate;
+            } else {
+                adjustedDate = new Date(originalDate.getTime() - (2 * 60 * 60 * 1000));
+            }
+
+            const dateStr = adjustedDate.toLocaleDateString('da-DK', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+
+            const timeStr = adjustedDate.toLocaleTimeString('da-DK', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            return { date: dateStr, time: timeStr, dateObj: adjustedDate };
+        }
+
+        function getElapsedTimeText(targetDate) {
+            if (!targetDate) return "-- min";
+
+            const now = new Date();
+            const diffMs = now - targetDate;
+
+            if (diffMs < 0) return "0 min";
+
+            const diffMinutes = Math.floor(diffMs / (1000 * 60));
+            return `${diffMinutes} min`;
+        }
+
+        function updateElapsedTimes() {
+            document.getElementById('basal-elapsed').innerText = getElapsedTimeText(lastBasalDate);
+            document.getElementById('bolus-elapsed').innerText = getElapsedTimeText(lastBolusDate);
+
+            if (lastBolusDate && minutesBetweenLimit !== null) {
+                const now = new Date();
+                const diffMinutes = Math.floor((now - lastBolusDate) / (1000 * 60));
+
+                if (diffMinutes >= minutesBetweenLimit) {
+                    if (!alarmHasSoundedForCurrentBolus) {
+                        playOneSecondAlarm();
+                        alarmHasSoundedForCurrentBolus = true;
+                    }
+                }
+            }
+        }
+
+        function registrerInsulin(collectionName, buttonId, type) {
+            initAudioContext();
+            const button = document.getElementById(buttonId);
+            
+            document.getElementById(`${type}-date`).innerText = '--/--/----';
+            document.getElementById(`${type}-time`).innerText = '--:--';
+            document.getElementById(`${type}-elapsed`).innerText = '-- min';
+
+            if (type === 'bolus') {
+                alarmHasSoundedForCurrentBolus = false;
+            }
+
+            button.disabled = true;
+            button.innerText = "Gemmer...";
+
+            db.collection(collectionName).add({
+                DateTime: firebase.firestore.FieldValue.serverTimestamp()
+            })
+            .then(() => {
+                hentData();
+            })
+            .catch((error) => {
+                console.error("Fejl ved gemning: ", error);
+                alert("Der opstod en fejl: " + error.message);
+            })
+            .finally(() => {
+                button.disabled = false;
+                button.innerText = (type === 'basal') ? "Registrer Basal" : "Registrer Bolus";
+            });
+        }
+
+        function hentData() {
+            hentSetupKonfiguration();
+            hentDexcomBlodsukker(); // Henter Dexcom blodsukker via Brugernavn/Password
+
+            // Hent seneste BasalLog
+            db.collection("BasalLog")
+                .orderBy("DateTime", "desc")
+                .limit(1)
+                .get()
+                .then((snapshot) => {
+                    statusDiv.className = "status online";
+                    statusDiv.innerText = "Forbundet (Opdateret)";
+
+                    if (!snapshot.empty) {
+                        const doc = snapshot.docs[0].data();
+                        const formatted = formatDateTime(doc.DateTime);
+                        
+                        lastBasalDate = formatted.dateObj;
+                        document.getElementById('basal-date').innerText = formatted.date;
+                        document.getElementById('basal-time').innerText = formatted.time;
+                    }
+                    updateElapsedTimes();
+                })
+                .catch((error) => {
+                    console.error("BasalLog fejl:", error);
+                    statusDiv.className = "status error";
+                    statusDiv.innerText = "Fejl: " + error.message;
+                });
+
+            // Hent seneste BolusLog
+            db.collection("BolusLog")
+                .orderBy("DateTime", "desc")
+                .limit(1)
+                .get()
+                .then((snapshot) => {
+                    if (!snapshot.empty) {
+                        const doc = snapshot.docs[0].data();
+                        const formatted = formatDateTime(doc.DateTime);
+                        
+                        if (!lastBolusDate || (formatted.dateObj && formatted.dateObj.getTime() !== lastBolusDate.getTime())) {
+                            alarmHasSoundedForCurrentBolus = false;
+                        }
+
+                        lastBolusDate = formatted.dateObj;
+                        document.getElementById('bolus-date').innerText = formatted.date;
+                        document.getElementById('bolus-time').innerText = formatted.time;
+                    }
+                    updateElapsedTimes();
+                })
+                .catch((error) => {
+                    console.error("BolusLog fejl:", error);
+                });
+        }
+
+        // Første indlæsning ved opstart
+        hentData();
+
+        // Genindlæs data fra Firestore og Dexcom hvert minut
+        setInterval(() => {
+            hentData();
+        }, 60000);
+    </script>
+</body>
+</html>
