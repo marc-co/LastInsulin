@@ -427,9 +427,9 @@
                 const dexcomDoc = await db.collection("Setup").doc("Dexcom").get();
                 if (dexcomDoc.exists) {
                     const data = dexcomDoc.data();
-                    // Tjekker både for AccountName og accountName (stort/lille bogstav)
-                    DEXCOM_ACCOUNT_NAME = data.AccountName || data.accountName || "";
-                    DEXCOM_PASSWORD = data.Password || data.password || "";
+                    // Udtrækker nøjagtigt de feltnavne der findes i din Firestore
+                    DEXCOM_ACCOUNT_NAME = data.DEXCOM_ACCOUNT_NAME || data.AccountName || data.accountName || "";
+                    DEXCOM_PASSWORD = data.DEXCOM_PASSWORD || data.Password || data.password || "";
                     console.log("Dexcom loginoplysninger hentet fra Firestore.");
                 } else {
                     console.warn("Dokumentet Setup/Dexcom blev ikke fundet i Firestore!");
