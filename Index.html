@@ -233,8 +233,8 @@
         };
 
         // 2. Dexcom Share Login Oplysninger (Account ID / Brugernavn & Kodeord)
-        const DEXCOM_ACCOUNT_NAME = "89e25931-71bb-471b-acc5-e4ba101c04ec";
-        const DEXCOM_PASSWORD = "KOnffeti09";
+	let DEXCOM_ACCOUNT_NAME = "";
+	let DEXCOM_PASSWORD = "";
         
         // Dexcom Share Server URL (Brug 'shareous1.dexcom.com' for Europa/Danmark, eller 'share1.dexcom.com' for USA)
         const DEXCOM_SHARE_SERVER = "https://shareous1.dexcom.com/ShareWebServices/Services";
@@ -425,18 +425,29 @@
             }
         }
 
-        // Hent "Minuttes Between" fra Setup/BolusAlarm
-        function hentSetupKonfiguration() {
-            db.collection("Setup").doc("BolusAlarm").get()
-                .then((doc) => {
-                    if (doc.exists && doc.data()["Minuttes Between"] !== undefined) {
-                        minutesBetweenLimit = parseInt(doc.data()["Minuttes Between"], 10);
-                    }
-                })
-                .catch((error) => {
-                    console.error("Fejl ved hentning af Setup/BolusAlarm:", error);
-                });
-        }
+	// Hent opsætning for både BolusAlarm og Dexcom fra Firestore
+	function hentSetupKonfiguration() {
+	    // 1. Hent alarmgrænse
+	    db.collection("Setup").doc("BolusAlarm").get()
+	        .then((doc) => {
+	            if (doc.exists && doc.data()["Minuttes Between"] !== undefined) {
+	                minutesBetweenLimit = parseInt(doc.data()["Minuttes Between"], 10);
+	            }
+	        })
+	        .catch((error) => console.error("Fejl ved hentning af BolusAlarm:", error));
+
+	    // 2. Hent Dexcom loginoplysninger
+	    db.collection("Setup").doc("DexcomAuth").get()
+	        .then((doc) => {
+	            if (doc.exists) {
+	                const data = doc.data();
+	                DEXCOM_ACCOUNT_NAME = data.AccountName || "";
+	                DEXCOM_PASSWORD = data.Password || "";
+	                console.log("Dexcom loginoplysninger hentet fra Firestore.");
+	            }
+	        })
+	        .catch((error) => console.error("Fejl ved hentning af DexcomAuth:", error));
+	}
 
         function formatDateTime(timestamp) {
             if (!timestamp) return { date: '--/--/----', time: '--:--', dateObj: null };
