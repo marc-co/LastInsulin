@@ -315,7 +315,8 @@
             return trendMap[trend] || '–';
         }
 
-        const CORS_PROXY = "https://api.codetabs.com/v1/proxy?quest=";
+        // Opdateret CORS Proxy til corsproxy.io
+        const CORS_PROXY = "https://corsproxy.io/?";
 
         async function getDexcomSessionId() {
             if (!DEXCOM_ACCOUNT_NAME || DEXCOM_ACCOUNT_NAME.trim() === "") {
@@ -336,8 +337,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'User-Agent': 'Dexcom Share/3.0.2.11297'
+                        'Accept': 'application/json'
                     },
                     body: JSON.stringify(payload)
                 });
@@ -371,8 +371,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'User-Agent': 'Dexcom Share/3.0.2.11297'
+                        'Accept': 'application/json'
                     }
                 });
 
@@ -427,7 +426,6 @@
                 const dexcomDoc = await db.collection("Setup").doc("Dexcom").get();
                 if (dexcomDoc.exists) {
                     const data = dexcomDoc.data();
-                    // Udtrækker nøjagtigt de feltnavne der findes i din Firestore
                     DEXCOM_ACCOUNT_NAME = data.DEXCOM_ACCOUNT_NAME || data.AccountName || data.accountName || "";
                     DEXCOM_PASSWORD = data.DEXCOM_PASSWORD || data.Password || data.password || "";
                     console.log("Dexcom loginoplysninger hentet fra Firestore.");
