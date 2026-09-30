@@ -437,7 +437,7 @@
 	        .catch((error) => console.error("Fejl ved hentning af BolusAlarm:", error));
 
 	    // 2. Hent Dexcom loginoplysninger
-	    db.collection("Setup").doc("DexcomAuth").get()
+	    db.collection("Setup").doc("Dexcom").get()
 	        .then((doc) => {
 	            if (doc.exists) {
 	                const data = doc.data();
@@ -446,7 +446,7 @@
 	                console.log("Dexcom loginoplysninger hentet fra Firestore.");
 	            }
 	        })
-	        .catch((error) => console.error("Fejl ved hentning af DexcomAuth:", error));
+	        .catch((error) => console.error("Fejl ved hentning af Dexcom:", error));
 	}
 
         function formatDateTime(timestamp) {
