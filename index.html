@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Sidste Insulin & Blodsukker - iPad Mini 3</title>
     
-    <!-- iOS PWA Indstillinger -->
+    <!-- iOS & Standard PWA Indstillinger -->
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
@@ -223,24 +224,23 @@
     <script>
         // 1. Firebase Konfiguration
         const firebaseConfig = {
-        apiKey: "AIzaSyBN36NSkRa4D07d0eiGIuKqmwDmpknPaTU",
-        authDomain: "lastinsulin.firebaseapp.com",
-        projectId: "lastinsulin",
-        storageBucket: "lastinsulin.firebasestorage.app",
-        messagingSenderId: "975999357269",
-        appId: "1:975999357269:web:9d333dcbdb66c9d0ce5fdc",
-        measurementId: "G-669YW3LQRH"
+            apiKey: "AIzaSyBN36NSkRa4D07d0eiGIuKqmwDmpknPaTU",
+            authDomain: "lastinsulin.firebaseapp.com",
+            projectId: "lastinsulin",
+            storageBucket: "lastinsulin.firebasestorage.app",
+            messagingSenderId: "975999357269",
+            appId: "1:975999357269:web:9d333dcbdb66c9d0ce5fdc",
+            measurementId: "G-669YW3LQRH"
         };
 
-        // 2. Dexcom Share Login Oplysninger (Account ID / Brugernavn & Kodeord)
-	let DEXCOM_ACCOUNT_NAME = "";
-	let DEXCOM_PASSWORD = "";
+        // 2. Dexcom Login Oplysninger
+        let DEXCOM_ACCOUNT_NAME = "";
+        let DEXCOM_PASSWORD = "";
         
-        // Dexcom Share Server URL (Brug 'shareous1.dexcom.com' for Europa/Danmark, eller 'share1.dexcom.com' for USA)
         const DEXCOM_SHARE_SERVER = "https://shareous1.dexcom.com/ShareWebServices/Services";
-        const DEXCOM_APPLICATION_ID = "d898ce3e-1e82-41db-82f0-80e918140ec0"; // Standard Dexcom Share App ID
+        const DEXCOM_APPLICATION_ID = "d898ce3e-1e82-41db-82f0-80e918140ec0";
 
-        let dexcomSessionId = null; // Gemmer det hentede Session ID
+        let dexcomSessionId = null;
 
         // Initialiser Firebase
         firebase.initializeApp(firebaseConfig);
@@ -295,16 +295,15 @@
             }
         }
 
-        // Oversætter Dexcom Share trend-tal/strenge til pile-ikoner
         function mapTrendArrow(trend) {
             const trendMap = {
-                1: '⇈', // DoubleUp
-                2: '↑', // SingleUp
-                3: '↗', // FortyFiveUp
-                4: '→', // Flat
-                5: '↘', // FortyFiveDown
-                6: '↓', // SingleDown
-                7: '⇊', // DoubleDown
+                1: '⇈',
+                2: '↑',
+                3: '↗',
+                4: '→',
+                5: '↘',
+                6: '↓',
+                7: '⇊',
                 'DoubleUp': '⇈',
                 'SingleUp': '↑',
                 'FortyFiveUp': '↗',
@@ -316,12 +315,10 @@
             return trendMap[trend] || '–';
         }
 
-        // Vi bruger en proxy-service, der videresender POST-payloads og skjulere origin
         const CORS_PROXY = "https://api.codetabs.com/v1/proxy?quest=";
 
-        // Trin 1: Hent Session ID fra Dexcom Share
         async function getDexcomSessionId() {
-            if (!DEXCOM_ACCOUNT_NAME || DEXCOM_ACCOUNT_NAME === "DIT_DEXCOM_BRUGERNAVN_ELLER_ACCOUNT_ID") {
+            if (!DEXCOM_ACCOUNT_NAME || DEXCOM_ACCOUNT_NAME.trim() === "") {
                 console.warn("Dexcom loginoplysninger mangler.");
                 return null;
             }
@@ -335,7 +332,6 @@
             };
 
             try {
-                // Vi kalder direkte eller via proxy
                 const response = await fetch(CORS_PROXY + encodeURIComponent(targetUrl), {
                     method: 'POST',
                     headers: {
@@ -351,7 +347,7 @@
                 }
 
                 let sessionId = await response.text();
-                sessionId = sessionId.replace(/^"|"$/g, ''); // Fjern anførselstegn
+                sessionId = sessionId.replace(/^"|"$/g, '');
                 
                 dexcomSessionId = sessionId;
                 console.log("Dexcom Share login fuldført. Session ID modtaget:", sessionId);
@@ -362,7 +358,6 @@
             }
         }
 
-        // Trin 2: Hent blodsukkermålinger ved hjælp af Session ID
         async function hentDexcomBlodsukker() {
             if (!dexcomSessionId) {
                 const acquired = await getDexcomSessionId();
@@ -385,7 +380,7 @@
                     console.log("Session udløbet. Fornyer login...");
                     dexcomSessionId = null;
                     const acquired = await getDexcomSessionId();
-                    if (acquired) return hentDexcomBlodsukker();
+                    if (acquired) return await hentDexcomBlodsukker();
                     return;
                 }
 
@@ -397,12 +392,9 @@
 
                 if (records && records.length > 0) {
                     const lastRecord = records[0];
-
-                    // Omregn mg/dL til mmol/L
                     const mmolValue = (lastRecord.Value / 18.0182).toFixed(1);
                     const trendArrow = mapTrendArrow(lastRecord.Trend);
 
-                    // Udtræk timestamp
                     let recordTime;
                     if (lastRecord.WT) {
                         const match = lastRecord.WT.match(/\d+/);
@@ -425,31 +417,27 @@
             }
         }
 
-	// Hent opsætning for både BolusAlarm og Dexcom fra Firestore
-	// 1. Opdateret hentSetupKonfiguration med async/await
-	async function hentSetupKonfiguration() {
-	    try {
-   	     // Hent alarmgrænse
-   	     const alarmDoc = await db.collection("Setup").doc("BolusAlarm").get();
-	        if (alarmDoc.exists && alarmDoc.data()["Minuttes Between"] !== undefined) {
-	            minutesBetweenLimit = parseInt(alarmDoc.data()["Minuttes Between"], 10);
- 	       }
+        async function hentSetupKonfiguration() {
+            try {
+                const alarmDoc = await db.collection("Setup").doc("BolusAlarm").get();
+                if (alarmDoc.exists && alarmDoc.data()["Minuttes Between"] !== undefined) {
+                    minutesBetweenLimit = parseInt(alarmDoc.data()["Minuttes Between"], 10);
+                }
 
-	        // Hent Dexcom loginoplysninger
-	        const dexcomDoc = await db.collection("Setup").doc("Dexcom").get();
-    	    if (dexcomDoc.exists) {
-   	         const data = dexcomDoc.data();
-   	         DEXCOM_ACCOUNT_NAME = data.AccountName || "";
-  	          DEXCOM_PASSWORD = data.Password || "";
-    	        console.log("Dexcom loginoplysninger hentet fra Firestore.");
-	        } else {
-	            console.warn("Dokumentet Setup/Dexcom blev ikke fundet i Firestore!");
-	        }
-	    } catch (error) {
-	        console.error("Fejl ved hentning af konfiguration fra Firestore:", error);
-	    }
-	}
-
+                const dexcomDoc = await db.collection("Setup").doc("Dexcom").get();
+                if (dexcomDoc.exists) {
+                    const data = dexcomDoc.data();
+                    // Tjekker både for AccountName og accountName (stort/lille bogstav)
+                    DEXCOM_ACCOUNT_NAME = data.AccountName || data.accountName || "";
+                    DEXCOM_PASSWORD = data.Password || data.password || "";
+                    console.log("Dexcom loginoplysninger hentet fra Firestore.");
+                } else {
+                    console.warn("Dokumentet Setup/Dexcom blev ikke fundet i Firestore!");
+                }
+            } catch (error) {
+                console.error("Fejl ved hentning af konfiguration fra Firestore:", error);
+            }
+        }
 
         function formatDateTime(timestamp) {
             if (!timestamp) return { date: '--/--/----', time: '--:--', dateObj: null };
@@ -538,68 +526,66 @@
             });
         }
 
-// 2. Opdateret hentData som venter på konfigurationen før Dexcom kaldes
-async function hentData() {
-    // Vent på at Firestore-loginoplysningerne er hentet
-    await hentSetupKonfiguration();
+        async function hentData() {
+            await hentSetupKonfiguration();
 
-    // Hent herefter Dexcom blodsukker
-    hentDexcomBlodsukker();
+            // Kør Dexcom blodsukker-hentning
+            await hentDexcomBlodsukker();
 
-    // Hent seneste BasalLog
-    db.collection("BasalLog")
-        .orderBy("DateTime", "desc")
-        .limit(1)
-        .get()
-        .then((snapshot) => {
-            statusDiv.className = "status online";
-            statusDiv.innerText = "Forbundet (Opdateret)";
+            // Hent seneste BasalLog
+            db.collection("BasalLog")
+                .orderBy("DateTime", "desc")
+                .limit(1)
+                .get()
+                .then((snapshot) => {
+                    statusDiv.className = "status online";
+                    statusDiv.innerText = "Forbundet (Opdateret)";
 
-            if (!snapshot.empty) {
-                const doc = snapshot.docs[0].data();
-                const formatted = formatDateTime(doc.DateTime);
-                
-                lastBasalDate = formatted.dateObj;
-                document.getElementById('basal-date').innerText = formatted.date;
-                document.getElementById('basal-time').innerText = formatted.time;
-            }
-            updateElapsedTimes();
-        })
-        .catch((error) => {
-            console.error("BasalLog fejl:", error);
-            statusDiv.className = "status error";
-            statusDiv.innerText = "Fejl: " + error.message;
-        });
+                    if (!snapshot.empty) {
+                        const doc = snapshot.docs[0].data();
+                        const formatted = formatDateTime(doc.DateTime);
+                        
+                        lastBasalDate = formatted.dateObj;
+                        document.getElementById('basal-date').innerText = formatted.date;
+                        document.getElementById('basal-time').innerText = formatted.time;
+                    }
+                    updateElapsedTimes();
+                })
+                .catch((error) => {
+                    console.error("BasalLog fejl:", error);
+                    statusDiv.className = "status error";
+                    statusDiv.innerText = "Fejl: " + error.message;
+                });
 
-    // Hent seneste BolusLog
-    db.collection("BolusLog")
-        .orderBy("DateTime", "desc")
-        .limit(1)
-        .get()
-        .then((snapshot) => {
-            if (!snapshot.empty) {
-                const doc = snapshot.docs[0].data();
-                const formatted = formatDateTime(doc.DateTime);
-                
-                if (!lastBolusDate || (formatted.dateObj && formatted.dateObj.getTime() !== lastBolusDate.getTime())) {
-                    alarmHasSoundedForCurrentBolus = false;
-                }
+            // Hent seneste BolusLog
+            db.collection("BolusLog")
+                .orderBy("DateTime", "desc")
+                .limit(1)
+                .get()
+                .then((snapshot) => {
+                    if (!snapshot.empty) {
+                        const doc = snapshot.docs[0].data();
+                        const formatted = formatDateTime(doc.DateTime);
+                        
+                        if (!lastBolusDate || (formatted.dateObj && formatted.dateObj.getTime() !== lastBolusDate.getTime())) {
+                            alarmHasSoundedForCurrentBolus = false;
+                        }
 
-                lastBolusDate = formatted.dateObj;
-                document.getElementById('bolus-date').innerText = formatted.date;
-                document.getElementById('bolus-time').innerText = formatted.time;
-            }
-            updateElapsedTimes();
-        })
-        .catch((error) => {
-            console.error("BolusLog fejl:", error);
-        });
-}
+                        lastBolusDate = formatted.dateObj;
+                        document.getElementById('bolus-date').innerText = formatted.date;
+                        document.getElementById('bolus-time').innerText = formatted.time;
+                    }
+                    updateElapsedTimes();
+                })
+                .catch((error) => {
+                    console.error("BolusLog fejl:", error);
+                });
+        }
 
         // Første indlæsning ved opstart
         hentData();
 
-        // Genindlæs data fra Firestore og Dexcom hvert minut
+        // Genindlæs data hvert minut
         setInterval(() => {
             hentData();
         }, 60000);
