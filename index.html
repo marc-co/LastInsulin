@@ -426,28 +426,30 @@
         }
 
 	// Hent opsætning for både BolusAlarm og Dexcom fra Firestore
-	function hentSetupKonfiguration() {
-	    // 1. Hent alarmgrænse
-	    db.collection("Setup").doc("BolusAlarm").get()
-	        .then((doc) => {
-	            if (doc.exists && doc.data()["Minuttes Between"] !== undefined) {
-	                minutesBetweenLimit = parseInt(doc.data()["Minuttes Between"], 10);
-	            }
-	        })
-	        .catch((error) => console.error("Fejl ved hentning af BolusAlarm:", error));
+	// 1. Opdateret hentSetupKonfiguration med async/await
+	async function hentSetupKonfiguration() {
+	    try {
+   	     // Hent alarmgrænse
+   	     const alarmDoc = await db.collection("Setup").doc("BolusAlarm").get();
+	        if (alarmDoc.exists && alarmDoc.data()["Minuttes Between"] !== undefined) {
+	            minutesBetweenLimit = parseInt(alarmDoc.data()["Minuttes Between"], 10);
+ 	       }
 
-	    // 2. Hent Dexcom loginoplysninger
-	    db.collection("Setup").doc("Dexcom").get()
-	        .then((doc) => {
-	            if (doc.exists) {
-	                const data = doc.data();
-	                DEXCOM_ACCOUNT_NAME = data.AccountName || "";
-	                DEXCOM_PASSWORD = data.Password || "";
-	                console.log("Dexcom loginoplysninger hentet fra Firestore.");
-	            }
-	        })
-	        .catch((error) => console.error("Fejl ved hentning af Dexcom:", error));
+	        // Hent Dexcom loginoplysninger
+	        const dexcomDoc = await db.collection("Setup").doc("Dexcom").get();
+    	    if (dexcomDoc.exists) {
+   	         const data = dexcomDoc.data();
+   	         DEXCOM_ACCOUNT_NAME = data.AccountName || "";
+  	          DEXCOM_PASSWORD = data.Password || "";
+    	        console.log("Dexcom loginoplysninger hentet fra Firestore.");
+	        } else {
+	            console.warn("Dokumentet Setup/Dexcom blev ikke fundet i Firestore!");
+	        }
+	    } catch (error) {
+	        console.error("Fejl ved hentning af konfiguration fra Firestore:", error);
+	    }
 	}
+
 
         function formatDateTime(timestamp) {
             if (!timestamp) return { date: '--/--/----', time: '--:--', dateObj: null };
@@ -536,59 +538,63 @@
             });
         }
 
-        function hentData() {
-            hentSetupKonfiguration();
-            hentDexcomBlodsukker(); // Henter Dexcom blodsukker via Brugernavn/Password
+// 2. Opdateret hentData som venter på konfigurationen før Dexcom kaldes
+async function hentData() {
+    // Vent på at Firestore-loginoplysningerne er hentet
+    await hentSetupKonfiguration();
 
-            // Hent seneste BasalLog
-            db.collection("BasalLog")
-                .orderBy("DateTime", "desc")
-                .limit(1)
-                .get()
-                .then((snapshot) => {
-                    statusDiv.className = "status online";
-                    statusDiv.innerText = "Forbundet (Opdateret)";
+    // Hent herefter Dexcom blodsukker
+    hentDexcomBlodsukker();
 
-                    if (!snapshot.empty) {
-                        const doc = snapshot.docs[0].data();
-                        const formatted = formatDateTime(doc.DateTime);
-                        
-                        lastBasalDate = formatted.dateObj;
-                        document.getElementById('basal-date').innerText = formatted.date;
-                        document.getElementById('basal-time').innerText = formatted.time;
-                    }
-                    updateElapsedTimes();
-                })
-                .catch((error) => {
-                    console.error("BasalLog fejl:", error);
-                    statusDiv.className = "status error";
-                    statusDiv.innerText = "Fejl: " + error.message;
-                });
+    // Hent seneste BasalLog
+    db.collection("BasalLog")
+        .orderBy("DateTime", "desc")
+        .limit(1)
+        .get()
+        .then((snapshot) => {
+            statusDiv.className = "status online";
+            statusDiv.innerText = "Forbundet (Opdateret)";
 
-            // Hent seneste BolusLog
-            db.collection("BolusLog")
-                .orderBy("DateTime", "desc")
-                .limit(1)
-                .get()
-                .then((snapshot) => {
-                    if (!snapshot.empty) {
-                        const doc = snapshot.docs[0].data();
-                        const formatted = formatDateTime(doc.DateTime);
-                        
-                        if (!lastBolusDate || (formatted.dateObj && formatted.dateObj.getTime() !== lastBolusDate.getTime())) {
-                            alarmHasSoundedForCurrentBolus = false;
-                        }
+            if (!snapshot.empty) {
+                const doc = snapshot.docs[0].data();
+                const formatted = formatDateTime(doc.DateTime);
+                
+                lastBasalDate = formatted.dateObj;
+                document.getElementById('basal-date').innerText = formatted.date;
+                document.getElementById('basal-time').innerText = formatted.time;
+            }
+            updateElapsedTimes();
+        })
+        .catch((error) => {
+            console.error("BasalLog fejl:", error);
+            statusDiv.className = "status error";
+            statusDiv.innerText = "Fejl: " + error.message;
+        });
 
-                        lastBolusDate = formatted.dateObj;
-                        document.getElementById('bolus-date').innerText = formatted.date;
-                        document.getElementById('bolus-time').innerText = formatted.time;
-                    }
-                    updateElapsedTimes();
-                })
-                .catch((error) => {
-                    console.error("BolusLog fejl:", error);
-                });
-        }
+    // Hent seneste BolusLog
+    db.collection("BolusLog")
+        .orderBy("DateTime", "desc")
+        .limit(1)
+        .get()
+        .then((snapshot) => {
+            if (!snapshot.empty) {
+                const doc = snapshot.docs[0].data();
+                const formatted = formatDateTime(doc.DateTime);
+                
+                if (!lastBolusDate || (formatted.dateObj && formatted.dateObj.getTime() !== lastBolusDate.getTime())) {
+                    alarmHasSoundedForCurrentBolus = false;
+                }
+
+                lastBolusDate = formatted.dateObj;
+                document.getElementById('bolus-date').innerText = formatted.date;
+                document.getElementById('bolus-time').innerText = formatted.time;
+            }
+            updateElapsedTimes();
+        })
+        .catch((error) => {
+            console.error("BolusLog fejl:", error);
+        });
+}
 
         // Første indlæsning ved opstart
         hentData();
