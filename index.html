@@ -315,48 +315,49 @@
             return trendMap[trend] || '–';
         }
 
-        // Opdateret CORS Proxy til corsproxy.io
-        const CORS_PROXY = "https://corsproxy.io/?";
+// Opdateret CORS Proxy
+const CORS_PROXY = "https://corsproxy.io/?";
 
-        async function getDexcomSessionId() {
-            if (!DEXCOM_ACCOUNT_NAME || DEXCOM_ACCOUNT_NAME.trim() === "") {
-                console.warn("Dexcom loginoplysninger mangler.");
-                return null;
-            }
+async function getDexcomSessionId() {
+    if (!DEXCOM_ACCOUNT_NAME || DEXCOM_ACCOUNT_NAME.trim() === "") {
+        console.warn("Dexcom loginoplysninger mangler.");
+        return null;
+    }
 
-            const targetUrl = `${DEXCOM_SHARE_SERVER}/General/LoginPublisherAccountById`;
+    const targetUrl = `${DEXCOM_SHARE_SERVER}/General/LoginPublisherAccountById`;
 
-            const payload = {
-                accountName: DEXCOM_ACCOUNT_NAME,
-                password: DEXCOM_PASSWORD,
-                applicationId: DEXCOM_APPLICATION_ID
-            };
+    const payload = {
+        accountName: DEXCOM_ACCOUNT_NAME,
+        password: DEXCOM_PASSWORD,
+        applicationId: DEXCOM_APPLICATION_ID
+    };
 
-            try {
-                const response = await fetch(CORS_PROXY + encodeURIComponent(targetUrl), {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
-                });
+    try {
+        // Sendes gennem corsproxy.io
+        const response = await fetch(CORS_PROXY + encodeURIComponent(targetUrl), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
 
-                if (!response.ok) {
-                    throw new Error(`Login fejlede med status: ${response.status}`);
-                }
-
-                let sessionId = await response.text();
-                sessionId = sessionId.replace(/^"|"$/g, '');
-                
-                dexcomSessionId = sessionId;
-                console.log("Dexcom Share login fuldført. Session ID modtaget:", sessionId);
-                return sessionId;
-            } catch (error) {
-                console.error("Fejl ved Dexcom Share login:", error);
-                return null;
-            }
+        if (!response.ok) {
+            throw new Error(`Login fejlede med status: ${response.status}`);
         }
+
+        let sessionId = await response.text();
+        sessionId = sessionId.replace(/^"|"$/g, '');
+        
+        dexcomSessionId = sessionId;
+        console.log("Dexcom Share login fuldført. Session ID modtaget:", sessionId);
+        return sessionId;
+    } catch (error) {
+        console.error("Fejl ved Dexcom Share login:", error);
+        return null;
+    }
+}
 
         async function hentDexcomBlodsukker() {
             if (!dexcomSessionId) {
